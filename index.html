@@ -1,0 +1,2162 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TERRA QUEST 2D • ภารกิจสำรวจโครงสร้างเปลือกโลก</title>
+    <!-- โหลด Tailwind CSS สำหรับตกแต่ง UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- โหลดฟอนต์ Chakra Petch และ Prompt -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,600;0,700;1,700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100dvh;
+            overflow: hidden;
+            background-color: #020617;
+            font-family: 'Prompt', sans-serif;
+            touch-action: none;
+        }
+        .font-arcade {
+            font-family: 'Chakra Petch', 'Prompt', sans-serif;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.86);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(56, 189, 248, 0.28);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+        }
+        .btn-arcade {
+            transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
+        }
+        .btn-arcade:active {
+            transform: scale(0.94);
+        }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 18px rgba(56, 189, 248, 0.45); }
+            50% { box-shadow: 0 0 32px rgba(56, 189, 248, 0.85); }
+        }
+        .glow-pulse {
+            animation: pulseGlow 2.2s infinite;
+        }
+        /* รองรับการเลื่อนหน้าจอแนวตั้งภายในหน้าต่างเมนูเมื่อเล่นแนวนอน */
+        .scrollable-modal {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
+        }
+        @media screen and (max-height: 520px) {
+            .compact-landscape-card {
+                padding: 1rem 1.25rem !important;
+            }
+            .compact-landscape-card h1 {
+                font-size: 1.5rem !important;
+                margin-bottom: 0.25rem !important;
+            }
+        }
+        /* แอนิเมชันไอคอนหมุนโทรศัพท์เป็นแนวนอน */
+        @keyframes rotatePhone {
+            0%, 15% { transform: rotate(0deg); }
+            45%, 75% { transform: rotate(-90deg); }
+            90%, 100% { transform: rotate(0deg); }
+        }
+        .phone-rotate-anim {
+            animation: rotatePhone 2.4s ease-in-out infinite;
+        }
+        /* แสดงหน้าจอบังคับหมุนแนวนอนเมื่อเปิดบนมือถือ/แท็บเล็ตในแนวตั้ง */
+        #landscape-lock-overlay {
+            display: none;
+        }
+        @media screen and (max-width: 920px) and (orientation: portrait) {
+            #landscape-lock-overlay {
+                display: flex !important;
+            }
+        }
+    </style>
+</head>
+<body class="text-slate-100 relative">
+
+    <!-- หน้าจอบังคับหมุนโทรศัพท์เป็นแนวนอน (แสดงอัตโนมัติเมื่อถือแนวตั้ง) -->
+    <div id="landscape-lock-overlay" class="fixed inset-0 z-50 flex-col items-center justify-center p-6 bg-slate-950/95 backdrop-blur-xl text-center">
+        <div class="glass-panel max-w-sm w-full rounded-3xl p-7 border-2 border-sky-400/50">
+            <div class="text-6xl mb-4 inline-block phone-rotate-anim">📱</div>
+            <h2 class="font-arcade text-xl font-bold text-sky-300 mb-2">
+                กรุณาหมุนโทรศัพท์เป็นแนวนอน
+            </h2>
+            <p class="text-xs sm:text-sm text-slate-300 leading-relaxed mb-5">
+                เกม <span class="text-amber-300 font-semibold">TERRA QUEST 2D</span> ออกแบบมาเพื่อเล่นในแนวนอน (Landscape) เพื่อให้มองเห็นเส้นทางผจญภัยและกดปุ่มบังคับได้ถนัดมือครับ
+            </p>
+            <button id="force-landscape-btn" type="button" class="btn-arcade w-full py-3 rounded-2xl bg-gradient-to-r from-sky-400 to-emerald-400 text-slate-950 font-bold text-sm shadow-lg">
+                🔄 ปรับเป็นแนวนอนอัตโนมัติ
+            </button>
+        </div>
+    </div>
+
+    <!-- แคนวาสหลักสำหรับแสดงผลเกม 2D -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- =========================================================
+         1. หน้าจอเริ่มต้น (START SCREEN)
+    ========================================================== -->
+    <div id="start-screen" class="fixed inset-0 z-30 flex justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-md scrollable-modal">
+        <div class="glass-panel compact-landscape-card w-full max-w-lg rounded-3xl p-5 sm:p-8 text-center relative overflow-hidden my-auto shrink-0">
+            <!-- แถบแสงตกแต่งด้านบน -->
+            <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-400"></div>
+
+            <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-sky-500/15 border border-sky-400/30 text-sky-300 text-xs sm:text-sm font-semibold mb-3">
+                <span>🌍 ภูมิศาสตร์ ม.ปลาย • ภารกิจสำรวจโครงสร้างเปลือกโลก</span>
+            </div>
+
+            <h1 class="font-arcade text-3xl sm:text-4xl font-bold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-sky-300 via-emerald-300 to-amber-300 mb-2">
+                TERRA QUEST 2D
+            </h1>
+            <p class="text-slate-300 text-xs sm:text-sm mb-5 leading-relaxed">
+                เจาะลึกชั้นโครงสร้างโลกทั้ง 3 ด่าน ตอบคำถามให้ถูกต้องเพื่อโจมตีบอส!<br>
+                <span class="text-amber-300 font-medium">★ เงื่อนไขผ่านภารกิจ: ต้องตอบถูกอย่างน้อย 5 จาก 10 ข้อ ★</span>
+            </p>
+
+            <!-- เลือกตัวละคร (ชาย / หญิง) -->
+            <div class="mb-4 text-left">
+                <label class="block text-xs font-semibold text-slate-300 mb-2">1. เลือกตัวละครนักสำรวจ</label>
+                <div class="grid grid-cols-2 gap-3">
+                    <button type="button" id="select-male" class="btn-arcade p-3 rounded-2xl border-2 border-sky-400 bg-sky-500/20 flex items-center gap-3 text-left transition">
+                        <div class="w-10 h-10 rounded-xl bg-sky-500/30 flex items-center justify-center text-xl">🧑‍🚀</div>
+                        <div>
+                            <div class="font-bold text-sm text-white">นักสำรวจชาย</div>
+                            <div class="text-[11px] text-sky-300">ชุดเกราะไซเบอร์-บลู</div>
+                        </div>
+                    </button>
+                    <button type="button" id="select-female" class="btn-arcade p-3 rounded-2xl border border-slate-700 bg-slate-800/70 flex items-center gap-3 text-left transition">
+                        <div class="w-10 h-10 rounded-xl bg-teal-500/30 flex items-center justify-center text-xl">👩‍🚀</div>
+                        <div>
+                            <div class="font-bold text-sm text-white">นักสำรวจหญิง</div>
+                            <div class="text-[11px] text-teal-300">ชุดเกราะแอโร-ทีล</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ช่องกรอกชื่อนักเรียน -->
+            <div class="mb-5 text-left">
+                <label for="player-name-input" class="block text-xs font-semibold text-slate-300 mb-1.5">2. พิมพ์ชื่อเล่นของคุณก่อนออกเดินทาง</label>
+                <input id="player-name-input" type="text" maxlength="18" placeholder="เช่น นนท์, พลอย, ต้นกล้า..."
+                    class="w-full px-4 py-3 rounded-2xl bg-slate-900/90 border border-slate-700 focus:border-sky-400 focus:outline-none text-white text-sm sm:text-base placeholder-slate-500 transition">
+                <p id="name-error-msg" class="hidden text-rose-400 text-xs mt-1.5">กรุณาพิมพ์ชื่อของคุณก่อนเริ่มเกมนะครับ</p>
+            </div>
+
+            <!-- คำแนะนำปุ่มควบคุมสั้นๆ -->
+            <div class="grid grid-cols-3 gap-2 text-[11px] text-slate-300 bg-slate-900/70 rounded-2xl p-2.5 mb-5 border border-slate-800">
+                <div><span class="text-sky-400 font-bold">เดิน:</span> A / D หรือ ◀ ▶</div>
+                <div><span class="text-emerald-400 font-bold">กระโดด 2 ชั้น:</span> W / Space</div>
+                <div><span class="text-amber-400 font-bold">พุ่งตัว:</span> Shift / DASH</div>
+            </div>
+
+            <button id="start-game-btn" class="btn-arcade glow-pulse w-full py-3.5 rounded-2xl bg-gradient-to-r from-sky-500 via-emerald-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-slate-950 font-arcade font-bold text-base sm:text-lg tracking-wide shadow-lg">
+                🚀 เริ่มการผจญภัยทันที!
+            </button>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         2. แถบสถานะระหว่างเล่น (HUD)
+    ========================================================== -->
+    <div id="hud-container" class="hidden fixed top-0 left-0 right-0 z-20 p-2.5 sm:p-4 pointer-events-none">
+        <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <!-- ข้อมูลผู้เล่นและคะแนน -->
+            <div class="glass-panel px-3.5 py-2 rounded-2xl flex items-center gap-3 pointer-events-auto">
+                <div id="hud-avatar" class="w-9 h-9 rounded-xl bg-sky-500/25 border border-sky-400/40 flex items-center justify-center text-lg">🧑‍🚀</div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span id="hud-player-name" class="font-bold text-xs sm:text-sm text-white">นักสำรวจ</span>
+                        <span id="hud-stage-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-400/30">ด่าน 1/3</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs mt-0.5">
+                        <span class="text-amber-300 font-bold">คะแนน: <span id="hud-score">0</span></span>
+                        <span class="text-emerald-300 font-semibold">ถูก: <span id="hud-correct">0</span>/10</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- แถบแจ้งเตือนภารกิจตรงกลาง -->
+            <div class="glass-panel px-4 py-2 rounded-2xl text-center hidden md:block">
+                <div id="hud-guide-text" class="text-xs sm:text-sm font-medium text-sky-200">
+                    วิ่งไปข้างหน้า หลบสิ่งกีดขวาง เพื่อท้าดวลบอสประจำด่าน!
+                </div>
+            </div>
+
+            <!-- ปุ่มเปิด/ปิดปุ่มควบคุมบนหน้าจอ & เสียง -->
+            <div class="flex items-center gap-2 pointer-events-auto">
+                <button id="toggle-touch-btn" class="glass-panel btn-arcade px-3 py-2 rounded-2xl text-xs font-semibold text-slate-200 hover:text-sky-300 flex items-center gap-1.5" title="แสดง/ซ่อนปุ่มกดบนหน้าจอ">
+                    <span>🎮</span>
+                    <span class="hidden sm:inline">ปุ่มบนจอ</span>
+                </button>
+                <button id="toggle-sound-btn" class="glass-panel btn-arcade px-3 py-2 rounded-2xl text-xs font-semibold text-slate-200 hover:text-amber-300" title="เปิด/ปิดเสียง">
+                    🔊
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         3. ปุ่มควบคุมบนหน้าจอสำหรับมือถือและแท็บเล็ต (TOUCH CONTROLS)
+    ========================================================== -->
+    <div id="touch-controls" class="hidden fixed bottom-4 left-4 right-4 z-20 flex items-end justify-between pointer-events-none">
+        <!-- ปุ่มเดินซ้าย - ขวา -->
+        <div class="flex items-center gap-3 pointer-events-auto">
+            <button id="btn-left" class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl glass-panel border-2 border-sky-400/40 active:bg-sky-500/40 flex items-center justify-center text-2xl sm:text-3xl text-white shadow-lg">
+                ◀
+            </button>
+            <button id="btn-right" class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl glass-panel border-2 border-sky-400/40 active:bg-sky-500/40 flex items-center justify-center text-2xl sm:text-3xl text-white shadow-lg">
+                ▶
+            </button>
+        </div>
+
+        <!-- ปุ่ม DASH และ JUMP -->
+        <div class="flex items-center gap-3 pointer-events-auto">
+            <button id="btn-dash" class="w-16 h-16 sm:w-20 sm:h-20 rounded-full glass-panel border-2 border-amber-400/50 active:bg-amber-500/40 flex flex-col items-center justify-center text-amber-300 font-arcade font-bold text-xs sm:text-sm shadow-lg">
+                <span>⚡</span>
+                <span>DASH</span>
+            </button>
+            <button id="btn-jump" class="w-20 h-20 sm:w-24 sm:h-24 rounded-full glass-panel border-2 border-emerald-400/60 active:bg-emerald-500/40 flex flex-col items-center justify-center text-emerald-300 font-arcade font-bold text-sm sm:text-base shadow-lg">
+                <span>▲</span>
+                <span>JUMP</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         4. หน้าต่างคำถามเมื่อปะทะบอส (QUIZ MODAL)
+    ========================================================== -->
+    <div id="quiz-modal" class="hidden fixed inset-0 z-30 justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md scrollable-modal">
+        <div class="glass-panel w-full max-w-2xl rounded-3xl p-4 sm:p-6 relative overflow-hidden my-auto shrink-0">
+            <!-- แถบเวลา 20 วินาที -->
+            <div class="w-full h-1.5 sm:h-2 bg-slate-800 rounded-full overflow-hidden mb-2.5 sm:mb-4">
+                <div id="quiz-timer-bar" class="h-full bg-gradient-to-r from-emerald-400 via-sky-400 to-amber-400 transition-all duration-100" style="width: 100%;"></div>
+            </div>
+
+            <div class="flex items-center justify-between gap-2 mb-2 sm:mb-3">
+                <div class="flex items-center gap-2">
+                    <span id="quiz-boss-badge" class="px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-[11px] sm:text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-400/30">
+                        ⚔️ ปะทะบอสด่าน 1
+                    </span>
+                    <span id="quiz-difficulty-badge" class="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold bg-sky-500/20 text-sky-300">
+                        ข้อที่ 1/10 • ระดับพื้นฐาน
+                    </span>
+                </div>
+                <div class="font-arcade font-bold text-sm sm:text-lg text-amber-300">
+                    ⏱️ <span id="quiz-timer-text">20</span>s
+                </div>
+            </div>
+
+            <h2 id="quiz-question-text" class="text-sm sm:text-lg font-bold text-white leading-snug mb-3">
+                คำถาม...
+            </h2>
+
+            <!-- ตัวเลือก 4 ข้อ (จัดวางแบบ 2 คอลัมน์ในแนวนอนเพื่อให้ไม่ต้องเลื่อนหน้าจอ) -->
+            <div id="quiz-options-container" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3"></div>
+
+            <!-- กล่องแสดงผลเฉลยและกำลังใจ -->
+            <div id="quiz-feedback-box" class="hidden rounded-2xl p-3 sm:p-4 border mb-3">
+                <div id="quiz-feedback-title" class="font-bold text-xs sm:text-sm mb-0.5"></div>
+                <p id="quiz-feedback-explanation" class="text-[11px] sm:text-xs text-slate-200 leading-relaxed"></p>
+            </div>
+
+            <button id="quiz-continue-btn" class="hidden btn-arcade w-full py-2.5 sm:py-3 rounded-2xl bg-gradient-to-r from-sky-400 to-emerald-400 text-slate-950 font-bold text-xs sm:text-base">
+                ดำเนินการต่อ ▶
+            </button>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         5. หน้าต่างสรุปผลตอนจบเกม (END SCREEN)
+    ========================================================== -->
+    <div id="end-screen" class="hidden fixed inset-0 z-40 justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md scrollable-modal">
+        <div class="glass-panel compact-landscape-card w-full max-w-lg rounded-3xl p-5 sm:p-8 text-center relative overflow-hidden my-auto shrink-0">
+            <div id="end-top-bar" class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-emerald-400 to-sky-400"></div>
+
+            <div id="end-icon" class="text-5xl sm:text-6xl mb-3">🏆</div>
+            <h2 id="end-title" class="font-arcade text-2xl sm:text-3xl font-bold text-white mb-2">
+                ภารกิจสำเร็จ!
+            </h2>
+            <p id="end-message" class="text-slate-300 text-xs sm:text-sm leading-relaxed mb-5">
+                คำชื่นชมและกำลังใจ...
+            </p>
+
+            <div class="grid grid-cols-3 gap-2.5 bg-slate-900/80 border border-slate-800 rounded-2xl p-4 mb-6">
+                <div>
+                    <div class="text-[11px] text-slate-400">คะแนนรวม</div>
+                    <div id="end-total-score" class="font-arcade text-xl sm:text-2xl font-bold text-amber-300">0</div>
+                </div>
+                <div>
+                    <div class="text-[11px] text-slate-400">ตอบถูกต้อง</div>
+                    <div id="end-correct-count" class="font-arcade text-xl sm:text-2xl font-bold text-emerald-400">0/10</div>
+                </div>
+                <div>
+                    <div class="text-[11px] text-slate-400">ระดับนักสำรวจ</div>
+                    <div id="end-rank" class="font-bold text-xs sm:text-sm text-sky-300 mt-1">ผู้พิทักษ์โลก</div>
+                </div>
+            </div>
+
+            <button id="play-again-btn" class="btn-arcade glow-pulse w-full py-3.5 rounded-2xl bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-400 text-slate-950 font-arcade font-bold text-base sm:text-lg">
+                🔄 เล่นใหม่อีกครั้ง (รีเซ็ตคะแนน)
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // =====================================================================
+        // 1. ระบบเสียงสังเคราะห์ (Web Audio API Sound Synthesizer)
+        // =====================================================================
+        class SoundEffects {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+            unlock() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume().catch(() => {});
+                }
+            }
+            playTone(freq, type = 'sine', duration = 0.15, vol = 0.12, slideFreq = null) {
+                if (!this.enabled) return;
+                this.unlock();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, now);
+                if (slideFreq) {
+                    osc.frequency.exponentialRampToValueAtTime(Math.max(20, slideFreq), now + duration);
+                }
+                gain.gain.setValueAtTime(vol, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + duration);
+            }
+            playClick() { this.playTone(540, 'sine', 0.08, 0.1, 720); }
+            playJump() { this.playTone(260, 'triangle', 0.16, 0.12, 520); }
+            playDashBoost() { this.playTone(320, 'sawtooth', 0.18, 0.1, 880); }
+            playGem() {
+                this.playTone(880, 'sine', 0.1, 0.1);
+                setTimeout(() => this.playTone(1320, 'sine', 0.14, 0.1), 55);
+            }
+            playHitObstacle() { this.playTone(150, 'sawtooth', 0.22, 0.14, 65); }
+            playCorrect() {
+                this.playTone(523.25, 'triangle', 0.12, 0.14);
+                setTimeout(() => this.playTone(659.25, 'triangle', 0.12, 0.14), 80);
+                setTimeout(() => this.playTone(783.99, 'triangle', 0.22, 0.16), 160);
+            }
+            playWrong() {
+                this.playTone(320, 'sine', 0.18, 0.12, 240);
+                setTimeout(() => this.playTone(240, 'sine', 0.24, 0.12, 190), 140);
+            }
+            playSlash(pitch = 1.0) {
+                this.playTone(680 * pitch, 'sawtooth', 0.14, 0.14, 140);
+            }
+            playMagicCast() {
+                this.playTone(440, 'sine', 0.35, 0.15, 1180);
+                setTimeout(() => this.playTone(660, 'triangle', 0.3, 0.14, 1320), 90);
+            }
+            playBossExplode() {
+                this.playTone(140, 'sawtooth', 0.45, 0.18, 35);
+                setTimeout(() => this.playTone(110, 'square', 0.4, 0.14, 28), 80);
+            }
+            playVictory() {
+                const notes = [523.25, 659.25, 783.99, 1046.5];
+                notes.forEach((n, i) => {
+                    setTimeout(() => this.playTone(n, 'triangle', 0.24, 0.15), i * 110);
+                });
+            }
+        }
+        const sound = new SoundEffects();
+
+        // =====================================================================
+        // 2. ข้อมูลด่านทั้ง 3 ด่าน และคลังคำถามโครงสร้างเปลือกโลก 10 ข้อ (ง่าย -> ยาก)
+        // =====================================================================
+        const STAGES_CONFIG = [
+            {
+                name: "ด่านที่ 1: ชั้นเปลือกโลกภาคพื้นทวีป (Crust)",
+                bossName: "โกเลมศิลาแกรนิต",
+                bossX: 1650,
+                gateX: 1820,
+                questionCount: 3,
+                themeColor: "#38bdf8",
+                coreColor: "#0ea5e9",
+                hazardType: "rock"
+            },
+            {
+                name: "ด่านที่ 2: ชั้นเนื้อโลกและฐานธรณีภาค (Mantle)",
+                bossName: "อสูรหินหนืดแมนเทิล",
+                bossX: 3450,
+                gateX: 3620,
+                questionCount: 4,
+                themeColor: "#34d399",
+                coreColor: "#10b981",
+                hazardType: "cyclone"
+            },
+            {
+                name: "ด่านที่ 3: แก่นโลกชั้นในสุด (Inner Core)",
+                bossName: "ราชันย์แก่นเหล็กหลอมเหลว",
+                bossX: 5150,
+                gateX: 5350,
+                questionCount: 3,
+                themeColor: "#fb923c",
+                coreColor: "#f97316",
+                hazardType: "fireball"
+            }
+        ];
+
+        const QUESTIONS_BANK = [
+            // ข้อ 1-3: ระดับพื้นฐาน (ด่านที่ 1)
+            {
+                level: "ระดับพื้นฐาน",
+                question: "1. โครงสร้างโลกแบ่งตามองค์ประกอบทางเคมีจากชั้นนอกสุดเข้าไปยังชั้นในสุด เรียงลำดับได้ถูกต้องตามข้อใด?",
+                options: [
+                    "เปลือกโลก (Crust) → เนื้อโลก (Mantle) → แก่นโลก (Core)",
+                    "เนื้อโลก (Mantle) → เปลือกโลก (Crust) → แก่นโลก (Core)",
+                    "แก่นโลก (Core) → เปลือกโลก (Crust) → เนื้อโลก (Mantle)",
+                    "เปลือกโลก (Crust) → แก่นโลก (Core) → เนื้อโลก (Mantle)"
+                ],
+                correctIndex: 0,
+                explanation: "เมื่อแบ่งตามองค์ประกอบทางเคมี โลกประกอบด้วย 3 ชั้นหลักจากนอกสุดเข้าในสุด คือ เปลือกโลก เนื้อโลก และแก่นโลกครับ"
+            },
+            {
+                level: "ระดับพื้นฐาน",
+                question: "2. เปลือกโลก (Crust) แบ่งออกเป็น 2 ประเภทหลัก คือข้อใด?",
+                options: [
+                    "เปลือกโลกชั้นใน และ เปลือกโลกชั้นนอก",
+                    "เปลือกโลกทวีป และ เปลือกโลกมหาสมุทร",
+                    "เปลือกโลกหินหนืด และ เปลือกโลกโลหะ",
+                    "เปลือกโลกขั้วโลก และ เปลือกโลกเส้นศูนย์สูตร"
+                ],
+                correctIndex: 1,
+                explanation: "เปลือกโลกแบ่งเป็น 2 ส่วน คือ เปลือกโลกทวีป (Continental Crust) และเปลือกโลกมหาสมุทร (Oceanic Crust) ครับ"
+            },
+            {
+                level: "ระดับพื้นฐาน",
+                question: "3. แก่นโลก (Core) ซึ่งเป็นชั้นในสุดของโลก มีองค์ประกอบหลักเป็นธาตุโลหะชนิดใดมากที่สุด?",
+                options: [
+                    "ทองคำ และ เงิน",
+                    "เหล็ก (Fe) และ นิกเกิล (Ni)",
+                    "ซิลิกอน และ อะลูมิเนียม",
+                    "แมกนีเซียม และ แคลเซียม"
+                ],
+                correctIndex: 1,
+                explanation: "แก่นโลกประกอบด้วยธาตุเหล็กและนิกเกิลเป็นส่วนใหญ่ ทำให้มีความหนาแน่นและอุณหภูมิสูงที่สุดในโครงสร้างโลกครับ"
+            },
+            // ข้อ 4-7: ระดับปานกลาง (ด่านที่ 2)
+            {
+                level: "ระดับปานกลาง",
+                question: "4. เปลือกโลกทวีป (Continental Crust) มีองค์ประกอบหลักเป็นแร่ซิลิกาและอะลูมินา จึงนิยมเรียกว่าชั้นใด?",
+                options: [
+                    "ชั้นไซมา (Sima)",
+                    "ชั้นไซอัล (Sial)",
+                    "ชั้นไนเฟ (Nife)",
+                    "ชั้นเมโซสเฟียร์ (Mesosphere)"
+                ],
+                correctIndex: 1,
+                explanation: "ชั้นไซอัล (Sial) ย่อมาจาก Silica และ Alumina ซึ่งเป็นองค์ประกอบหลักของหินแกรนิตในเปลือกโลกทวีปครับ"
+            },
+            {
+                level: "ระดับปานกลาง",
+                question: "5. ข้อใดเปรียบเทียบความแตกต่างระหว่าง 'เปลือกโลกทวีป' และ 'เปลือกโลกมหาสมุทร' ได้ถูกต้อง?",
+                options: [
+                    "เปลือกโลกมหาสมุทรหนากว่า แต่มีความหนาแน่นน้อยกว่าเปลือกโลกทวีป",
+                    "เปลือกโลกทวีปหนากว่า (เฉลี่ย 35-70 กม.) แต่มีความหนาแน่นน้อยกว่าเปลือกโลกมหาสมุทร",
+                    "เปลือกโลกทั้งสองชนิดมีความหนาและความหนาแน่นเท่ากันทุกบริเวณ",
+                    "เปลือกโลกมหาสมุทรประกอบด้วยหินแกรนิต ส่วนเปลือกโลกทวีปเป็นหินบะซอลต์"
+                ],
+                correctIndex: 1,
+                explanation: "เปลือกโลกทวีปมีความหนามากกว่า (35-70 กม.) เป็นหินแกรนิต ส่วนเปลือกโลกมหาสมุทรบางกว่า (5-10 กม.) แต่เป็นหินบะซอลต์ที่มีความหนาแน่นสูงกว่าครับ"
+            },
+            {
+                level: "ระดับปานกลาง",
+                question: "6. แนวแบ่งเขตความไม่ต่อเนื่องระหว่าง 'ชั้นเปลือกโลก' กับ 'ชั้นเนื้อโลก' มีชื่อเรียกว่าอะไร?",
+                options: [
+                    "แนวแบ่งเขตกูเทนเบิร์ก (Gutenberg Discontinuity)",
+                    "แนวแบ่งเขตโมโฮโรวิซิก หรือ โมโฮ (Moho Discontinuity)",
+                    "แนวแบ่งเขตเลห์แมนน์ (Lehmann Discontinuity)",
+                    "แนวรอยเลื่อนซานแอนเดรียส (San Andreas Fault)"
+                ],
+                correctIndex: 1,
+                explanation: "แนวแบ่งเขตโมโฮ (Moho) เป็นรอยต่อระหว่างเปลือกโลกกับเนื้อโลก ซึ่งความเร็วคลื่นไหวสะเทือนจะเพิ่มขึ้นอย่างฉับพลันครับ"
+            },
+            {
+                level: "ระดับปานกลาง",
+                question: "7. ชั้นฐานธรณีภาค (Asthenosphere) ซึ่งอยู่ในเนื้อโลกตอนบน มีสมบัติสำคัญอย่างไรต่อการเปลี่ยนแปลงของเปลือกโลก?",
+                options: [
+                    "เป็นของแข็งเปราะแตกหักง่าย ทำให้เกิดหลุมยุบ",
+                    "เป็นหินหนืดกึ่งหลอมเหลวที่มีการหมุนเวียนพาความร้อน ทำให้แผ่นธรณีภาคเคลื่อนที่ได้",
+                    "เป็นชั้นก๊าซความดันสูงที่คอยพยุงมหาสมุทรไว้",
+                    "มีอุณหภูมิต่ำกว่าจุดเยือกแข็งตลอดเวลา"
+                ],
+                correctIndex: 1,
+                explanation: "กระแสการพาความร้อน (Convection Current) ในชั้นฐานธรณีภาคเป็นแรงขับเคลื่อนสำคัญที่ทำให้แผ่นเปลือกโลกเคลื่อนที่ครับ"
+            },
+            // ข้อ 8-10: ระดับวิเคราะห์และประยุกต์ (ด่านที่ 3)
+            {
+                level: "ระดับวิเคราะห์",
+                question: "8. เมื่อแผ่นเปลือกโลกมหาสมุทรเคลื่อนที่เข้าชนกับแผ่นเปลือกโลกทวีป เหตุใดแผ่นเปลือกโลกมหาสมุทรจึงมุดตัวลงข้างใต้เสมอ?",
+                options: [
+                    "เพราะเปลือกโลกมหาสมุทรอยู่ต่ำกว่าระดับน้ำทะเลจึงถูกน้ำกดทับ",
+                    "เพราะเปลือกโลกมหาสมุทรประกอบด้วยหินบะซอลต์ที่มีความหนาแน่นมากกว่าหินแกรนิตของเปลือกโลกทวีป",
+                    "เพราะเปลือกโลกทวีปมีอุณหภูมิสูงกว่าและหลอมละลายง่ายกว่า",
+                    "เพราะแรงโน้มถ่วงบริเวณมหาสมุทรมีค่ามากกว่าบนทวีป"
+                ],
+                correctIndex: 1,
+                explanation: "ตามหลักความหนาแน่น วัตถุที่มีความหนาแน่นมากกว่าจะจมลง แผ่นเปลือกโลกมหาสมุทร (หินบะซอลต์ ~3.0 g/cm³) จึงมุดตัวใต้เปลือกโลกทวีป (หินแกรนิต ~2.7 g/cm³) ครับ"
+            },
+            {
+                level: "ระดับวิเคราะห์",
+                question: "9. นักธรณีวิทยาใช้หลักฐานและวิธีการศึกษาใดเป็นสำคัญในการวิเคราะห์โครงสร้างภายในของโลกที่ลึกเกินกว่าการขุดเจาะ?",
+                options: [
+                    "การเจาะสำรวจอุโมงค์ลงไปถึงระดับแก่นโลกโดยตรง",
+                    "การวิเคราะห์พฤติกรรม ความเร็ว และการหักเหของคลื่นไหวสะเทือน (Seismic Waves)",
+                    "การวัดความเค็มและอุณหภูมิของน้ำทะเลลึก",
+                    "การสำรวจชั้นบรรยากาศด้วยดาวเทียมอุตุนิยมวิทยา"
+                ],
+                correctIndex: 1,
+                explanation: "คลื่นปฐมภูมิ (P-wave) และคลื่นทุติยภูมิ (S-wave) เดินทางผ่านตัวกลางที่มีสถานะและความหนาแน่นต่างกันด้วยความเร็วต่างกัน ทำให้ทราบโครงสร้างภายในโลกครับ"
+            },
+            {
+                level: "ระดับวิเคราะห์",
+                question: "10. หาก 'แก่นโลกชั้นนอก' (Outer Core) ซึ่งมีสถานะเป็นโลหะเหลวหยุดการหมุนเวียน จะส่งผลกระทบสำคัญต่อโลกอย่างไร?",
+                options: [
+                    "สนามแม่เหล็กโลกจะอ่อนกำลังลงหรือหายไป ทำให้รังสีคอสมิกและลมสุริยะพุ่งเข้าสู่ผิวโลกได้โดยตรง",
+                    "น้ำในมหาสมุทรทั้งหมดจะระเหยกลายเป็นไอภายใน 24 ชั่วโมง",
+                    "แรงโน้มถ่วงของโลกจะเพิ่มขึ้นเป็นสองเท่าทันที",
+                    "ฤดูกาลบนโลกจะหายไปและเกิดยุคน้ำแข็งทั่วโลก"
+                ],
+                correctIndex: 0,
+                explanation: "การหมุนเวียนของเหล็กและนิกเกิลหลอมเหลวในแก่นโลกชั้นนอกเป็นต้นกำเนิดของสนามแม่เหล็กโลก (Earth's Magnetic Field) ที่ช่วยปกป้องสิ่งมีชีวิตจากลมสุริยะครับ"
+            }
+        ];
+
+        // =====================================================================
+        // 3. สถานะของเกมและระบบ Canvas 2D
+        // =====================================================================
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        let viewW = window.innerWidth;
+        let viewH = window.innerHeight;
+        let groundY = viewH * 0.78;
+
+        const gameState = {
+            isPlaying: false,
+            isQuizOpen: false,
+            playerName: "นักสำรวจ",
+            gender: "male",
+            score: 0,
+            correctCount: 0,
+            wrongCount: 0,
+            currentStageIndex: 0,
+            currentQuestionIndex: 0,
+            stageQuestionProgress: 0,
+            activeBoss: null,
+            quizTimer: 20,
+            quizInterval: null,
+            answeredCurrent: false
+        };
+
+        const input = {
+            left: false,
+            right: false
+        };
+
+        const camera2D = {
+            x: 0,
+            shake: 0
+        };
+
+        const player = {
+            x: 140,
+            y: groundY,
+            vx: 0,
+            vy: 0,
+            width: 38,
+            height: 62,
+            facing: 1,
+            onGround: true,
+            jumpsLeft: 2,
+            dashTimer: 0,
+            dashCooldown: 0,
+            invulnTimer: 0,
+            animTime: 0,
+            afterImages: []
+        };
+
+        let platforms = [];
+        let gems = [];
+        let hazards = [];
+        let bosses = [];
+        let stageGates = [];
+        let beams = [];
+        let particles = [];
+        let floatingTexts = [];
+        let bgStars = [];
+
+        // ระบบฉากคัตซีนปราบบอสแต่ละด่าน
+        const cutscene = {
+            active: false,
+            type: 'stage1',
+            timer: 0,
+            step: 0,
+            boss: null,
+            bannerTitle: '',
+            bannerSub: '',
+            slashes: [],
+            shockwaves: [],
+            skyBeamAlpha: 0,
+            onComplete: null
+        };
+
+        function resizeCanvas() {
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            viewW = window.innerWidth;
+            viewH = window.innerHeight;
+            canvas.width = viewW * dpr;
+            canvas.height = viewH * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            const oldGround = groundY;
+            groundY = Math.max(260, viewH * 0.78);
+            const diff = groundY - oldGround;
+
+            player.y += diff;
+            platforms.forEach(p => p.y += diff);
+            gems.forEach(g => g.y += diff);
+            hazards.forEach(h => h.y += diff);
+            bosses.forEach(b => b.y = groundY);
+            stageGates.forEach(g => g.y = groundY);
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function initStars() {
+            bgStars = [];
+            for (let i = 0; i < 85; i++) {
+                bgStars.push({
+                    x: Math.random() * 2200,
+                    y: Math.random() * (viewH * 0.55),
+                    r: 0.8 + Math.random() * 1.8,
+                    phase: Math.random() * Math.PI * 2
+                });
+            }
+        }
+
+        function buildWorldEntities() {
+            platforms = [
+                // ด่านที่ 1
+                { x: 420, y: groundY - 95, w: 150, h: 18, color: "#38bdf8" },
+                { x: 760, y: groundY - 140, w: 160, h: 18, color: "#38bdf8" },
+                { x: 1120, y: groundY - 100, w: 150, h: 18, color: "#38bdf8" },
+                // ด่านที่ 2
+                { x: 2150, y: groundY - 105, w: 160, h: 18, color: "#34d399" },
+                { x: 2520, y: groundY - 150, w: 170, h: 18, color: "#34d399" },
+                { x: 2950, y: groundY - 110, w: 160, h: 18, color: "#34d399" },
+                // ด่านที่ 3
+                { x: 3980, y: groundY - 110, w: 160, h: 18, color: "#fb923c" },
+                { x: 4380, y: groundY - 155, w: 170, h: 18, color: "#fb923c" },
+                { x: 4720, y: groundY - 105, w: 150, h: 18, color: "#fb923c" }
+            ];
+
+            gems = [];
+            platforms.forEach(p => {
+                gems.push({ x: p.x + p.w * 0.3, y: p.y - 28, collected: false, phase: Math.random() * 6 });
+                gems.push({ x: p.x + p.w * 0.7, y: p.y - 28, collected: false, phase: Math.random() * 6 });
+            });
+            [620, 960, 1360, 2360, 2760, 3180, 4180, 4560].forEach(gx => {
+                gems.push({ x: gx, y: groundY - 32, collected: false, phase: Math.random() * 6 });
+            });
+
+            hazards = [
+                // ด่าน 1: หินกลิ้ง
+                { x: 640, y: groundY - 22, r: 22, minX: 480, maxX: 840, vx: 130, type: "rock", angle: 0 },
+                { x: 1220, y: groundY - 24, r: 24, minX: 1020, maxX: 1420, vx: -150, type: "rock", angle: 0 },
+                // ด่าน 2: พายุไซโคลน
+                { x: 2380, y: groundY - 34, r: 28, minX: 2150, maxX: 2620, vx: 165, type: "cyclone", angle: 0 },
+                { x: 3020, y: groundY - 34, r: 28, minX: 2800, maxX: 3250, vx: -185, type: "cyclone", angle: 0 },
+                // ด่าน 3: ลูกไฟแมกมา
+                { x: 4180, y: groundY - 24, r: 24, minX: 3960, maxX: 4400, vx: 195, type: "fireball", angle: 0 },
+                { x: 4780, y: groundY - 25, r: 25, minX: 4540, maxX: 4940, vx: -215, type: "fireball", angle: 0 }
+            ];
+
+            bosses = STAGES_CONFIG.map((cfg, idx) => ({
+                stageIndex: idx,
+                x: cfg.bossX,
+                y: groundY,
+                maxHp: cfg.questionCount,
+                currentHp: cfg.questionCount,
+                defeated: false,
+                hitFlash: 0,
+                config: cfg
+            }));
+
+            stageGates = STAGES_CONFIG.map((cfg, idx) => ({
+                stageIndex: idx,
+                x: cfg.gateX,
+                y: groundY,
+                open: false,
+                color: cfg.themeColor
+            }));
+        }
+
+        // =====================================================================
+        // 4. ระบบอนุภาค ตัวเลขลอย และเอฟเฟกต์คัตซีนปราบบอส
+        // =====================================================================
+        function spawnParticles(x, y, color, count = 12) {
+            for (let i = 0; i < count; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const spd = 60 + Math.random() * 240;
+                particles.push({
+                    x, y,
+                    vx: Math.cos(ang) * spd,
+                    vy: Math.sin(ang) * spd - 40,
+                    size: 2.5 + Math.random() * 4,
+                    color,
+                    life: 0.45 + Math.random() * 0.45,
+                    maxLife: 0.9
+                });
+            }
+        }
+
+        function spawnFloatingText(x, y, text, color = "#fbbf24") {
+            floatingTexts.push({
+                x, y, text, color,
+                life: 1.1
+            });
+        }
+
+        function spawnBossAttackBeam(targetBoss) {
+            if (!targetBoss) return;
+            beams.push({
+                x: player.x + 25,
+                y: player.y - 36,
+                targetX: targetBoss.x,
+                targetY: targetBoss.y - 65,
+                progress: 0,
+                boss: targetBoss
+            });
+        }
+
+        function spawnCutsceneSlash(x, y, angle, color = "#38bdf8", length = 140) {
+            cutscene.slashes.push({
+                x, y, angle, color, length,
+                life: 0.45,
+                maxLife: 0.45
+            });
+            cutscene.shockwaves.push({
+                x, y,
+                radius: 14,
+                maxRadius: 110,
+                color,
+                life: 0.4,
+                maxLife: 0.4
+            });
+        }
+
+        function startBossDefeatCutscene(stageIndex, boss, isPerfectTen, onComplete) {
+            cutscene.active = true;
+            cutscene.timer = 0;
+            cutscene.step = 0;
+            cutscene.boss = boss;
+            cutscene.slashes = [];
+            cutscene.shockwaves = [];
+            cutscene.skyBeamAlpha = 0;
+            cutscene.onComplete = onComplete;
+
+            input.left = false;
+            input.right = false;
+            player.vx = 0;
+            player.vy = 0;
+            player.y = groundY;
+            player.x = boss.x - 165;
+            player.facing = 1;
+
+            if (stageIndex === 0) {
+                cutscene.type = 'stage1';
+                cutscene.bannerTitle = 'FINISHER COMBO • 4-SLASH STRIKE!';
+                cutscene.bannerSub = `${gameState.playerName} พุ่งฟันดาบพลังงาน 4 จังหวะโค่นโกเลมศิลาแกรนิต!`;
+            } else if (stageIndex === 1) {
+                cutscene.type = 'stage2';
+                cutscene.bannerTitle = 'ARCANE BLADE • 2 SLASHES + MAGIC BLAST!';
+                cutscene.bannerSub = `${gameState.playerName} ฟันดาบ 2 ครั้งพร้อมปลดปล่อยเวทมนตร์ทำลายอสูรหินหนืด!`;
+            } else if (isPerfectTen) {
+                cutscene.type = 'stage3_perfect';
+                cutscene.bannerTitle = '★ PERFECT 10/10 • TERRA SUPERNOVA ★';
+                cutscene.bannerSub = `สุดยอด! ${gameState.playerName} ตอบถูกครบทั้ง 10 ข้อ ปลดปล่อยพลังออโรราขั้นสูงสุด!`;
+            } else {
+                cutscene.type = 'stage3_normal';
+                cutscene.bannerTitle = 'FINAL FINISHER • CORE BREAKER!';
+                cutscene.bannerSub = `${gameState.playerName} รวมพลังธรณีวิทยาพิชิตบอสสุดท้ายสำเร็จ!`;
+            }
+        }
+
+        function updateBossCutscene(dt) {
+            cutscene.timer += dt;
+            const t = cutscene.timer;
+            const boss = cutscene.boss;
+            if (!boss) {
+                cutscene.active = false;
+                if (cutscene.onComplete) cutscene.onComplete();
+                return;
+            }
+
+            for (let i = cutscene.slashes.length - 1; i >= 0; i--) {
+                cutscene.slashes[i].life -= dt;
+                if (cutscene.slashes[i].life <= 0) cutscene.slashes.splice(i, 1);
+            }
+            for (let i = cutscene.shockwaves.length - 1; i >= 0; i--) {
+                const sw = cutscene.shockwaves[i];
+                sw.life -= dt;
+                sw.radius += (sw.maxRadius - sw.radius) * 10 * dt;
+                if (sw.life <= 0) cutscene.shockwaves.splice(i, 1);
+            }
+            if (cutscene.skyBeamAlpha > 0) {
+                cutscene.skyBeamAlpha = Math.max(0, cutscene.skyBeamAlpha - dt * 1.1);
+            }
+
+            const focusX = (player.x + boss.x) * 0.5 - viewW * 0.5;
+            camera2D.x += (Math.max(0, Math.min(5400 - viewW, focusX)) - camera2D.x) * 0.18;
+
+            // 1) คัตซีนด่านที่ 1: ฟันบอส 4 ครั้ง
+            if (cutscene.type === 'stage1') {
+                const slashTimes = [0.25, 0.65, 1.05, 1.50];
+                const slashConfigs = [
+                    { px: boss.x - 65, py: groundY, angle: -0.55, pitch: 1.0, label: "SLASH 1!" },
+                    { px: boss.x + 65, py: groundY, angle: 0.65, pitch: 1.12, label: "SLASH 2!" },
+                    { px: boss.x - 55, py: groundY - 45, angle: -0.25, pitch: 1.25, label: "SLASH 3!" },
+                    { px: boss.x + 70, py: groundY - 70, angle: 0.85, pitch: 1.45, label: "FINAL SLASH 4!" }
+                ];
+
+                if (cutscene.step < 4 && t >= slashTimes[cutscene.step]) {
+                    const cfg = slashConfigs[cutscene.step];
+                    player.afterImages.push({ x: player.x, y: player.y, alpha: 0.75 });
+                    player.x = cfg.px;
+                    player.y = cfg.py;
+                    player.facing = player.x < boss.x ? 1 : -1;
+                    boss.hitFlash = 0.22;
+                    camera2D.shake = cutscene.step === 3 ? 22 : 12;
+
+                    sound.playSlash(cfg.pitch);
+                    spawnCutsceneSlash(boss.x, boss.y - 75, cfg.angle, "#38bdf8", cutscene.step === 3 ? 190 : 140);
+                    spawnParticles(boss.x, boss.y - 75, "#38bdf8", cutscene.step === 3 ? 32 : 16);
+                    spawnFloatingText(boss.x, boss.y - 135, cfg.label, "#38bdf8");
+                    cutscene.step++;
+                }
+
+                if (cutscene.step === 4 && t >= 2.05) {
+                    cutscene.step = 5;
+                    player.x = boss.x - 140;
+                    player.y = groundY;
+                    player.facing = 1;
+                    sound.playBossExplode();
+                    camera2D.shake = 26;
+                    spawnParticles(boss.x, boss.y - 70, "#fbbf24", 45);
+                    spawnParticles(boss.x, boss.y - 70, "#38bdf8", 35);
+                    spawnFloatingText(boss.x, boss.y - 110, "STAGE 1 CLEARED!", "#fbbf24");
+                }
+
+                if (t >= 2.85) {
+                    cutscene.active = false;
+                    if (cutscene.onComplete) cutscene.onComplete();
+                }
+            }
+            // 2) คัตซีนด่านที่ 2: ฟันบอส 2 ครั้ง + ยิงเวทมนตร์ 1 ครั้ง
+            else if (cutscene.type === 'stage2') {
+                if (cutscene.step === 0 && t >= 0.3) {
+                    player.afterImages.push({ x: player.x, y: player.y, alpha: 0.75 });
+                    player.x = boss.x - 65;
+                    player.facing = 1;
+                    boss.hitFlash = 0.2;
+                    camera2D.shake = 12;
+                    sound.playSlash(1.05);
+                    spawnCutsceneSlash(boss.x, boss.y - 75, -0.5, "#34d399", 145);
+                    spawnParticles(boss.x, boss.y - 75, "#34d399", 18);
+                    spawnFloatingText(boss.x, boss.y - 135, "BLADE STRIKE 1!", "#34d399");
+                    cutscene.step = 1;
+                } else if (cutscene.step === 1 && t >= 0.75) {
+                    player.afterImages.push({ x: player.x, y: player.y, alpha: 0.75 });
+                    player.x = boss.x + 65;
+                    player.facing = -1;
+                    boss.hitFlash = 0.2;
+                    camera2D.shake = 14;
+                    sound.playSlash(1.25);
+                    spawnCutsceneSlash(boss.x, boss.y - 75, 0.55, "#6ee7b7", 155);
+                    spawnParticles(boss.x, boss.y - 75, "#6ee7b7", 20);
+                    spawnFloatingText(boss.x, boss.y - 135, "BLADE STRIKE 2!", "#6ee7b7");
+                    cutscene.step = 2;
+                } else if (cutscene.step === 2 && t >= 1.25) {
+                    player.afterImages.push({ x: player.x, y: player.y, alpha: 0.75 });
+                    player.x = boss.x - 195;
+                    player.y = groundY - 75;
+                    player.facing = 1;
+                    sound.playMagicCast();
+                    spawnParticles(player.x + 25, player.y - 36, "#c084fc", 24);
+                    spawnFloatingText(player.x, player.y - 75, "ARCANE NOVA!", "#e879f9");
+                    beams.push({
+                        x: player.x + 25,
+                        y: player.y - 36,
+                        targetX: boss.x,
+                        targetY: boss.y - 75,
+                        progress: 0,
+                        boss: boss,
+                        isCutsceneMagic: true
+                    });
+                    cutscene.step = 3;
+                } else if (cutscene.step === 3 && t >= 1.85) {
+                    player.y = groundY;
+                    sound.playBossExplode();
+                    camera2D.shake = 28;
+                    cutscene.shockwaves.push({
+                        x: boss.x, y: boss.y - 75,
+                        radius: 20, maxRadius: 210,
+                        color: "#e879f9", life: 0.55, maxLife: 0.55
+                    });
+                    spawnParticles(boss.x, boss.y - 75, "#e879f9", 45);
+                    spawnParticles(boss.x, boss.y - 75, "#34d399", 35);
+                    spawnFloatingText(boss.x, boss.y - 125, "STAGE 2 CLEARED!", "#fbbf24");
+                    cutscene.step = 4;
+                }
+
+                if (t >= 2.75) {
+                    cutscene.active = false;
+                    if (cutscene.onComplete) cutscene.onComplete();
+                }
+            }
+            // 3A) คัตซีนด่านสุดท้าย (ตอบถูก 5-9 ข้อ)
+            else if (cutscene.type === 'stage3_normal') {
+                if (cutscene.step === 0 && t >= 0.3) {
+                    player.afterImages.push({ x: player.x, y: player.y, alpha: 0.75 });
+                    player.x = boss.x - 70;
+                    player.facing = 1;
+                    boss.hitFlash = 0.22;
+                    camera2D.shake = 14;
+                    sound.playSlash(1.1);
+                    spawnCutsceneSlash(boss.x, boss.y - 75, -0.45, "#fbbf24", 160);
+                    spawnParticles(boss.x, boss.y - 75, "#fbbf24", 22);
+                    cutscene.step = 1;
+                } else if (cutscene.step === 1 && t >= 0.85) {
+                    player.afterImages.push({ x: player.x, y: player.y, alpha: 0.75 });
+                    player.x = boss.x + 70;
+                    player.y = groundY - 50;
+                    player.facing = -1;
+                    boss.hitFlash = 0.25;
+                    camera2D.shake = 18;
+                    sound.playSlash(1.35);
+                    spawnCutsceneSlash(boss.x, boss.y - 75, 0.5, "#38bdf8", 180);
+                    spawnParticles(boss.x, boss.y - 75, "#38bdf8", 28);
+                    cutscene.step = 2;
+                } else if (cutscene.step === 2 && t >= 1.45) {
+                    player.x = boss.x - 160;
+                    player.y = groundY;
+                    player.facing = 1;
+                    sound.playBossExplode();
+                    camera2D.shake = 30;
+                    cutscene.shockwaves.push({
+                        x: boss.x, y: boss.y - 80,
+                        radius: 25, maxRadius: 230,
+                        color: "#fbbf24", life: 0.6, maxLife: 0.6
+                    });
+                    spawnParticles(boss.x, boss.y - 80, "#fbbf24", 50);
+                    spawnFloatingText(boss.x, boss.y - 135, "FINAL BOSS DEFEATED!", "#fbbf24");
+                    cutscene.step = 3;
+                }
+
+                if (t >= 2.5) {
+                    cutscene.active = false;
+                    if (cutscene.onComplete) cutscene.onComplete();
+                }
+            }
+            // 3B) คัตซีนลับสุดอลังการ (ตอบถูกครบทั้ง 10 ข้อ): TERRA SUPERNOVA
+            else if (cutscene.type === 'stage3_perfect') {
+                if (t < 0.8) {
+                    player.y = groundY - Math.min(130, t * 180);
+                    if (Math.random() < 0.65) {
+                        const colors = ["#38bdf8", "#34d399", "#fbbf24", "#e879f9"];
+                        spawnParticles(
+                            player.x + (Math.random() - 0.5) * 140,
+                            player.y - 30 + (Math.random() - 0.5) * 140,
+                            colors[Math.floor(Math.random() * colors.length)],
+                            2
+                        );
+                    }
+                }
+
+                const pentaTimes = [0.85, 1.12, 1.38, 1.62, 1.88];
+                const pentaAngles = [-0.7, 0.7, -0.2, 0.3, 1.15];
+                const pentaColors = ["#38bdf8", "#34d399", "#fbbf24", "#e879f9", "#ffffff"];
+
+                if (cutscene.step < 5 && t >= pentaTimes[cutscene.step]) {
+                    const idx = cutscene.step;
+                    player.afterImages.push({ x: player.x, y: player.y, alpha: 0.85 });
+                    player.x = boss.x + (idx % 2 === 0 ? -85 : 85);
+                    player.y = groundY - 40 - idx * 14;
+                    player.facing = player.x < boss.x ? 1 : -1;
+                    boss.hitFlash = 0.25;
+                    camera2D.shake = 18 + idx * 3;
+                    sound.playSlash(1.1 + idx * 0.14);
+                    spawnCutsceneSlash(boss.x, boss.y - 80, pentaAngles[idx], pentaColors[idx], 220);
+                    spawnParticles(boss.x, boss.y - 80, pentaColors[idx], 24);
+                    if (idx === 0) spawnFloatingText(boss.x, boss.y - 150, "PERFECT COMBO!", "#fbbf24");
+                    cutscene.step++;
+                }
+
+                if (cutscene.step === 5 && t >= 2.25) {
+                    cutscene.step = 6;
+                    player.x = boss.x - 190;
+                    player.y = groundY;
+                    player.facing = 1;
+                    cutscene.skyBeamAlpha = 1.0;
+                    sound.playMagicCast();
+                    sound.playBossExplode();
+                    camera2D.shake = 38;
+
+                    ["#38bdf8", "#34d399", "#fbbf24", "#e879f9"].forEach((col, cIdx) => {
+                        cutscene.shockwaves.push({
+                            x: boss.x, y: boss.y - 80,
+                            radius: 15 + cIdx * 20,
+                            maxRadius: 320 + cIdx * 45,
+                            color: col,
+                            life: 0.85,
+                            maxLife: 0.85
+                        });
+                        spawnParticles(boss.x, boss.y - 80, col, 35);
+                    });
+                    spawnFloatingText(boss.x, boss.y - 155, "★ 10/10 GRAND VICTORY! ★", "#fef08a");
+                }
+
+                if (t >= 3.45) {
+                    cutscene.active = false;
+                    if (cutscene.onComplete) cutscene.onComplete();
+                }
+            }
+        }
+
+        // =====================================================================
+        // 5. การควบคุมตัวละคร (Jump, Dash, Keyboard & Touch)
+        // =====================================================================
+        function triggerJump() {
+            if (!gameState.isPlaying || gameState.isQuizOpen || cutscene.active) return;
+            if (player.jumpsLeft > 0) {
+                player.vy = player.jumpsLeft === 2 ? -540 : -470;
+                player.onGround = false;
+                player.jumpsLeft--;
+                sound.playJump();
+                spawnParticles(player.x, player.y, "#38bdf8", 10);
+            }
+        }
+
+        function triggerDash() {
+            if (!gameState.isPlaying || gameState.isQuizOpen || cutscene.active) return;
+            if (player.dashCooldown <= 0 && player.dashTimer <= 0) {
+                player.dashTimer = 0.22;
+                player.dashCooldown = 0.75;
+                player.invulnTimer = 0.35;
+                sound.playDashBoost();
+                spawnParticles(player.x, player.y - 30, "#fbbf24", 14);
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = true;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') input.right = true;
+            if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+                if (!e.repeat) triggerJump();
+            }
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                if (!e.repeat) triggerDash();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = false;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') input.right = false;
+        });
+
+        // =====================================================================
+        // 6. ระบบตอบคำถามและต่อสู้กับบอส
+        // =====================================================================
+        function updateHUD() {
+            document.getElementById('hud-player-name').textContent = gameState.playerName;
+            document.getElementById('hud-avatar').textContent = gameState.gender === 'female' ? '👩‍🚀' : '🧑‍🚀';
+            document.getElementById('hud-stage-badge').textContent = `ด่าน ${gameState.currentStageIndex + 1}/3`;
+            document.getElementById('hud-score').textContent = gameState.score;
+            document.getElementById('hud-correct').textContent = gameState.correctCount;
+        }
+
+        function startBossBattle(boss) {
+            if (gameState.isQuizOpen || boss.defeated) return;
+            gameState.isQuizOpen = true;
+            gameState.activeBoss = boss;
+            gameState.stageQuestionProgress = 0;
+            input.left = false;
+            input.right = false;
+            player.vx = 0;
+            showQuizModal(gameState.currentQuestionIndex);
+        }
+
+        function showQuizModal(qIndex) {
+            const qData = QUESTIONS_BANK[qIndex];
+            const stageCfg = STAGES_CONFIG[gameState.currentStageIndex];
+            gameState.answeredCurrent = false;
+
+            const modal = document.getElementById('quiz-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            document.getElementById('quiz-boss-badge').textContent = `⚔️ ปะทะ ${stageCfg.bossName}`;
+            document.getElementById('quiz-difficulty-badge').textContent = `ข้อที่ ${qIndex + 1}/10 • ${qData.level}`;
+            document.getElementById('quiz-question-text').textContent = qData.question;
+
+            const feedbackBox = document.getElementById('quiz-feedback-box');
+            feedbackBox.classList.add('hidden');
+            document.getElementById('quiz-continue-btn').classList.add('hidden');
+
+            const optionsContainer = document.getElementById('quiz-options-container');
+            optionsContainer.innerHTML = '';
+
+            const letters = ['ก', 'ข', 'ค', 'ง'];
+            qData.options.forEach((optText, idx) => {
+                const btn = document.createElement('button');
+                btn.className = "btn-arcade w-full text-left p-3.5 rounded-2xl bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700 hover:border-sky-400 text-slate-100 text-xs sm:text-sm font-medium flex items-center gap-3 transition";
+                btn.innerHTML = `
+                    <span class="w-7 h-7 rounded-xl bg-sky-500/20 border border-sky-400/40 text-sky-300 font-bold flex items-center justify-center shrink-0">${letters[idx]}</span>
+                    <span>${optText}</span>
+                `;
+                btn.addEventListener('click', () => handleAnswerSelection(idx));
+                optionsContainer.appendChild(btn);
+            });
+
+            // เริ่มจับเวลา 20 วินาที
+            clearInterval(gameState.quizInterval);
+            gameState.quizTimer = 20;
+            document.getElementById('quiz-timer-text').textContent = gameState.quizTimer;
+            document.getElementById('quiz-timer-bar').style.width = '100%';
+
+            gameState.quizInterval = setInterval(() => {
+                gameState.quizTimer -= 0.1;
+                const clamped = Math.max(0, gameState.quizTimer);
+                document.getElementById('quiz-timer-text').textContent = Math.ceil(clamped);
+                document.getElementById('quiz-timer-bar').style.width = `${(clamped / 20) * 100}%`;
+
+                if (clamped <= 0) {
+                    clearInterval(gameState.quizInterval);
+                    handleAnswerSelection(-1); // หมดเวลา
+                }
+            }, 100);
+        }
+
+        function handleAnswerSelection(selectedIndex) {
+            if (gameState.answeredCurrent) return;
+            gameState.answeredCurrent = true;
+            clearInterval(gameState.quizInterval);
+
+            const qData = QUESTIONS_BANK[gameState.currentQuestionIndex];
+            const isCorrect = selectedIndex === qData.correctIndex;
+            const optionButtons = document.getElementById('quiz-options-container').querySelectorAll('button');
+
+            optionButtons.forEach((btn, idx) => {
+                btn.disabled = true;
+                if (idx === qData.correctIndex) {
+                    btn.classList.remove('bg-slate-800/90', 'border-slate-700');
+                    btn.classList.add('bg-emerald-500/25', 'border-emerald-400', 'text-emerald-200');
+                } else if (idx === selectedIndex) {
+                    btn.classList.remove('bg-slate-800/90', 'border-slate-700');
+                    btn.classList.add('bg-rose-500/25', 'border-rose-400', 'text-rose-200');
+                }
+            });
+
+            const feedbackBox = document.getElementById('quiz-feedback-box');
+            const feedbackTitle = document.getElementById('quiz-feedback-title');
+            const feedbackExp = document.getElementById('quiz-feedback-explanation');
+            feedbackBox.classList.remove('hidden', 'bg-emerald-500/15', 'border-emerald-400/40', 'bg-amber-500/15', 'border-amber-400/40');
+
+            if (isCorrect) {
+                gameState.score += 10;
+                gameState.correctCount += 1;
+                sound.playCorrect();
+                spawnBossAttackBeam(gameState.activeBoss);
+
+                feedbackBox.classList.add('bg-emerald-500/15', 'border-emerald-400/40');
+                feedbackTitle.className = "font-bold text-sm sm:text-base mb-1 text-emerald-300";
+                feedbackTitle.textContent = `✨ ยอดเยี่ยมมาก ${gameState.playerName}! โจมตีบอสสำเร็จ (+10 คะแนน)`;
+            } else {
+                gameState.wrongCount += 1;
+                sound.playWrong();
+
+                feedbackBox.classList.add('bg-amber-500/15', 'border-amber-400/40');
+                feedbackTitle.className = "font-bold text-sm sm:text-base mb-1 text-amber-300";
+                feedbackTitle.textContent = selectedIndex === -1
+                    ? `⏰ หมดเวลาแล้วไม่เป็นไรนะ ${gameState.playerName} มาดูเฉลยกัน!`
+                    : `💛 เกือบถูกแล้ว ${gameState.playerName}! สู้ต่อนะ มาดูคำอธิบายกัน`;
+            }
+
+            feedbackExp.textContent = qData.explanation;
+            gameState.currentQuestionIndex += 1;
+            gameState.stageQuestionProgress += 1;
+            updateHUD();
+
+            const continueBtn = document.getElementById('quiz-continue-btn');
+            continueBtn.classList.remove('hidden');
+
+            if (gameState.wrongCount >= 6) {
+                continueBtn.textContent = "ดูสรุปผลการผจญภัย ▶";
+            } else if (gameState.stageQuestionProgress < STAGES_CONFIG[gameState.currentStageIndex].questionCount) {
+                continueBtn.textContent = "โจมตีบอสต่อ (ข้อถัดไป) ⚔️";
+            } else {
+                continueBtn.textContent = "ปลดปล่อยท่าไม้ตายปิดฉากบอส! ⚡";
+            }
+        }
+
+        function showEndScreen(isVictory) {
+            gameState.isPlaying = false;
+            gameState.isQuizOpen = false;
+            clearInterval(gameState.quizInterval);
+
+            document.getElementById('quiz-modal').classList.add('hidden');
+            document.getElementById('quiz-modal').classList.remove('flex');
+            document.getElementById('hud-container').classList.add('hidden');
+            document.getElementById('touch-controls').classList.add('hidden');
+
+            const endScreen = document.getElementById('end-screen');
+            endScreen.classList.remove('hidden');
+            endScreen.classList.add('flex');
+
+            document.getElementById('end-total-score').textContent = gameState.score;
+            document.getElementById('end-correct-count').textContent = `${gameState.correctCount}/10`;
+
+            const endIcon = document.getElementById('end-icon');
+            const endTitle = document.getElementById('end-title');
+            const endMessage = document.getElementById('end-message');
+            const endRank = document.getElementById('end-rank');
+
+            if (isVictory) {
+                sound.playVictory();
+                if (gameState.correctCount === 10) {
+                    endIcon.textContent = "👑";
+                    endTitle.textContent = `สุดยอดระดับตำนาน ${gameState.playerName}!`;
+                    endMessage.textContent = `ขอชื่นชม ${gameState.playerName} อย่างสุดหัวใจ! คุณตอบถูกครบทั้ง 10 ข้อและพิชิตบอสทั้ง 3 ด่านได้อย่างสมบูรณ์แบบ ความรู้เรื่องโครงสร้างเปลือกโลกของคุณแข็งแกร่งมาก!`;
+                    endRank.textContent = "ปรมาจารย์ธรณี 10/10";
+                } else {
+                    endIcon.textContent = "🏆";
+                    endTitle.textContent = `ยินดีด้วย ${gameState.playerName} ภารกิจสำเร็จ!`;
+                    endMessage.textContent = `เก่งมากครับ ${gameState.playerName}! คุณสามารถผ่านเกณฑ์และปราบบอสใหญ่ประจำด่านสุดท้ายได้สำเร็จ ขอบคุณที่ตั้งใจทบทวนเรื่องโครงสร้างเปลือกโลกอย่างเต็มที่ครับ`;
+                    endRank.textContent = "ผู้พิทักษ์โลก";
+                }
+            } else {
+                endIcon.textContent = "🌟";
+                endTitle.textContent = `พยายามได้ดีมากแล้ว ${gameState.playerName}!`;
+                endMessage.textContent = `ไม่เป็นไรเลยนะ ${gameState.playerName} การเรียนรู้คือการฝึกฝน รอบนี้ตอบถูก ${gameState.correctCount} ข้อ (เกณฑ์ผ่าน 5 ข้อ) ลองทบทวนเฉลยแล้วกดเริ่มใหม่เพื่อพิชิตบอสทั้ง 3 ด่านอีกครั้งได้เลย!`;
+                endRank.textContent = "นักสำรวจฝึกหัด";
+            }
+        }
+
+        // =====================================================================
+        // 7. ลูปอัปเดตฟิสิกส์และการวาดภาพ 2D (Game Loop)
+        // =====================================================================
+        function updateGame(dt, time) {
+            // อัปเดตอนุภาคและตัวเลขลอย
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vy += 320 * dt;
+                p.life -= dt;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                const ft = floatingTexts[i];
+                ft.y -= 42 * dt;
+                ft.life -= dt;
+                if (ft.life <= 0) floatingTexts.splice(i, 1);
+            }
+
+            // อัปเดตลำแสงโจมตีบอส
+            for (let i = beams.length - 1; i >= 0; i--) {
+                const b = beams[i];
+                b.progress += dt * 3.4;
+                if (b.progress >= 1) {
+                    spawnParticles(b.targetX, b.targetY, b.isCutsceneMagic ? "#e879f9" : b.boss.config.coreColor, 26);
+                    if (!b.isCutsceneMagic) {
+                        spawnFloatingText(b.targetX, b.targetY - 50, "CRITICAL HIT! +10", "#fbbf24");
+                    }
+                    camera2D.shake = 14;
+                    if (b.boss) {
+                        b.boss.currentHp = Math.max(0, b.boss.currentHp - 1);
+                        b.boss.hitFlash = 0.25;
+                    }
+                    beams.splice(i, 1);
+                }
+            }
+
+            // อัปเดตสิ่งกีดขวาง
+            hazards.forEach(h => {
+                h.x += h.vx * dt;
+                if (h.x > h.maxX) { h.x = h.maxX; h.vx *= -1; }
+                if (h.x < h.minX) { h.x = h.minX; h.vx *= -1; }
+                h.angle += dt * 6 * Math.sign(h.vx);
+            });
+
+            bosses.forEach(b => {
+                if (b.hitFlash > 0) b.hitFlash = Math.max(0, b.hitFlash - dt);
+            });
+
+            if (camera2D.shake > 0.2) {
+                camera2D.shake *= 0.85;
+            } else {
+                camera2D.shake = 0;
+            }
+
+            if (cutscene.active) {
+                updateBossCutscene(dt);
+                for (let i = player.afterImages.length - 1; i >= 0; i--) {
+                    player.afterImages[i].alpha -= dt * 2.2;
+                    if (player.afterImages[i].alpha <= 0) player.afterImages.splice(i, 1);
+                }
+                return;
+            }
+
+            if (!gameState.isPlaying) {
+                camera2D.x = 250 + Math.sin(time * 0.4) * 200;
+                return;
+            }
+
+            if (gameState.isQuizOpen) return;
+
+            // อัปเดตคูลดาวน์และอนิเมชันผู้เล่น
+            player.animTime += dt;
+            if (player.dashCooldown > 0) player.dashCooldown -= dt;
+            if (player.invulnTimer > 0) player.invulnTimer -= dt;
+
+            for (let i = player.afterImages.length - 1; i >= 0; i--) {
+                player.afterImages[i].alpha -= dt * 3.5;
+                if (player.afterImages[i].alpha <= 0) player.afterImages.splice(i, 1);
+            }
+
+            const moveSpeed = 310;
+            if (player.dashTimer > 0) {
+                player.dashTimer -= dt;
+                player.vx = player.facing * 760;
+                player.afterImages.push({ x: player.x, y: player.y, alpha: 0.65 });
+            } else {
+                if (input.left) {
+                    player.vx = -moveSpeed;
+                    player.facing = -1;
+                } else if (input.right) {
+                    player.vx = moveSpeed;
+                    player.facing = 1;
+                } else {
+                    player.vx *= 0.78;
+                    if (Math.abs(player.vx) < 8) player.vx = 0;
+                }
+            }
+
+            const prevY = player.y;
+            player.x += player.vx * dt;
+            player.vy += 1280 * dt; // แรงโน้มถ่วง
+            player.y += player.vy * dt;
+
+            // จำกัดขอบซ้ายและประตูมิติที่ยังไม่เปิด
+            if (player.x < 40) player.x = 40;
+            stageGates.forEach(gate => {
+                if (!gate.open && player.x > gate.x - 24) {
+                    player.x = gate.x - 24;
+                }
+            });
+
+            // ตรวจการเหยียบแท่นลอยฟ้า
+            player.onGround = false;
+            if (player.vy >= 0) {
+                platforms.forEach(p => {
+                    if (
+                        player.x + 14 > p.x &&
+                        player.x - 14 < p.x + p.w &&
+                        prevY <= p.y + 8 &&
+                        player.y >= p.y
+                    ) {
+                        player.y = p.y;
+                        player.vy = 0;
+                        player.onGround = true;
+                        player.jumpsLeft = 2;
+                    }
+                });
+            }
+
+            // ตรวจการยืนบนพื้นหลัก
+            if (player.y >= groundY) {
+                player.y = groundY;
+                player.vy = 0;
+                player.onGround = true;
+                player.jumpsLeft = 2;
+            }
+
+            // เก็บคริสตัลโบนัส (+5 คะแนน)
+            gems.forEach(g => {
+                if (!g.collected) {
+                    const dx = player.x - g.x;
+                    const dy = (player.y - 30) - g.y;
+                    if (Math.hypot(dx, dy) < 40) {
+                        g.collected = true;
+                        gameState.score += 5;
+                        updateHUD();
+                        sound.playGem();
+                        spawnParticles(g.x, g.y, "#fbbf24", 12);
+                        spawnFloatingText(g.x, g.y - 15, "+5", "#fde047");
+                    }
+                }
+            });
+
+            // ตรวจการชนสิ่งกีดขวาง (กระเด้งถอยหลังเล็กน้อย ไม่ลดคะแนนเพื่อให้ไม่กดดัน)
+            if (player.invulnTimer <= 0) {
+                hazards.forEach(h => {
+                    const dx = player.x - h.x;
+                    const dy = (player.y - 28) - h.y;
+                    if (Math.hypot(dx, dy) < h.r + 18) {
+                        player.invulnTimer = 1.0;
+                        player.vy = -340;
+                        player.x = Math.max(40, player.x - 75);
+                        camera2D.shake = 12;
+                        sound.playHitObstacle();
+                        spawnParticles(player.x, player.y - 25, "#fb7185", 14);
+                        spawnFloatingText(player.x, player.y - 65, "หลบให้พ้นนะ!", "#fda4af");
+                    }
+                });
+            }
+
+            // ตรวจการเข้าใกล้บอสประจำด่านเพื่อเปิดหน้าต่างคำถาม
+            const currentBoss = bosses[gameState.currentStageIndex];
+            if (currentBoss && !currentBoss.defeated) {
+                if (Math.abs(player.x - currentBoss.x) < 135) {
+                    startBossBattle(currentBoss);
+                }
+            }
+
+            // กล้องติดตามผู้เล่นอย่างนุ่มนวล
+            const targetCamX = Math.max(0, Math.min(5450 - viewW, player.x - viewW * 0.34));
+            camera2D.x += (targetCamX - camera2D.x) * 0.14;
+        }
+
+        function drawHero(x, y, facing, isFemale, animTime, isMoving, isDashing) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(facing, 1);
+
+            const walkBob = isMoving ? Math.sin(animTime * 16) * 3 : Math.sin(animTime * 3) * 1.5;
+            const legSwing = isMoving ? Math.sin(animTime * 16) * 9 : 0;
+
+            // ออร่าใต้เท้า
+            ctx.fillStyle = isFemale ? "rgba(45, 212, 191, 0.25)" : "rgba(56, 189, 248, 0.25)";
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 20, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // ผ้าคลุมพลังงานด้านหลัง
+            ctx.fillStyle = isFemale ? "#0d9488" : "#0284c7";
+            ctx.beginPath();
+            ctx.moveTo(-6, -44 + walkBob);
+            ctx.quadraticCurveTo(-24 - (isDashing ? 16 : 0), -28 + Math.sin(animTime * 10) * 4, -20 - (isDashing ? 18 : 0), -10);
+            ctx.lineTo(-4, -18);
+            ctx.closePath();
+            ctx.fill();
+
+            // ขาทั้งสองข้าง
+            ctx.strokeStyle = "#1e293b";
+            ctx.lineWidth = 7;
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.moveTo(-5, -20 + walkBob);
+            ctx.lineTo(-5 - legSwing, -3);
+            ctx.moveTo(5, -20 + walkBob);
+            ctx.lineTo(5 + legSwing, -3);
+            ctx.stroke();
+
+            // ลำตัวเกราะ
+            ctx.fillStyle = isFemale ? "#14b8a6" : "#38bdf8";
+            ctx.beginPath();
+            ctx.roundRect(-11, -44 + walkBob, 22, 26, 7);
+            ctx.fill();
+
+            // แกนพลังงานกลางอก
+            ctx.fillStyle = "#fef08a";
+            ctx.beginPath();
+            ctx.arc(3, -32 + walkBob, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // ศีรษะและหมวกนักสำรวจ
+            ctx.fillStyle = "#fde68a";
+            ctx.beginPath();
+            ctx.arc(0, -54 + walkBob, 11, 0, Math.PI * 2);
+            ctx.fill();
+
+            // ผม / หางม้าสำหรับตัวละครหญิง
+            ctx.fillStyle = isFemale ? "#312e81" : "#1e293b";
+            ctx.beginPath();
+            ctx.arc(-1, -56 + walkBob, 11.5, Math.PI * 0.9, Math.PI * 2.1);
+            ctx.fill();
+            if (isFemale) {
+                ctx.beginPath();
+                ctx.ellipse(-14, -52 + walkBob + Math.sin(animTime * 12) * 3, 7, 11, 0.4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // แว่นไซเบอร์เรืองแสง
+            ctx.fillStyle = "#38bdf8";
+            ctx.shadowColor = "#38bdf8";
+            ctx.shadowBlur = 8;
+            ctx.fillRect(1, -57 + walkBob, 11, 5);
+            ctx.shadowBlur = 0;
+
+            // ดาบพลังงานภูมิศาสตร์
+            ctx.save();
+            ctx.translate(10, -30 + walkBob);
+            ctx.rotate(cutscene.active ? -0.9 : -0.35);
+            ctx.fillStyle = "#e2e8f0";
+            ctx.fillRect(0, -3, 8, 6);
+            ctx.fillStyle = isFemale ? "#5eead4" : "#7dd3fc";
+            ctx.shadowColor = isFemale ? "#2dd4bf" : "#38bdf8";
+            ctx.shadowBlur = 12;
+            ctx.beginPath();
+            ctx.moveTo(8, -4);
+            ctx.lineTo(42, 0);
+            ctx.lineTo(8, 4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
+            ctx.restore();
+        }
+
+        function drawBoss(boss, time) {
+            if (boss.defeated) return;
+            const cfg = boss.config;
+            const hover = Math.sin(time * 3 + boss.stageIndex) * 7;
+
+            ctx.save();
+            ctx.translate(boss.x, boss.y);
+
+            if (boss.hitFlash > 0) {
+                ctx.filter = "brightness(2.2)";
+            }
+
+            // ออร่าพื้นใต้บอส
+            ctx.fillStyle = cfg.themeColor + "33";
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 58, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (boss.stageIndex === 0) {
+                // บอส 1: โกเลมศิลาแกรนิต
+                ctx.fillStyle = "#334155";
+                ctx.beginPath();
+                ctx.roundRect(-42, -135 + hover, 84, 115, 22);
+                ctx.fill();
+
+                ctx.strokeStyle = "#38bdf8";
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // เขาคริสตัลคู่
+                ctx.fillStyle = "#38bdf8";
+                ctx.beginPath();
+                ctx.moveTo(-32, -132 + hover); ctx.lineTo(-46, -165 + hover); ctx.lineTo(-16, -135 + hover);
+                ctx.moveTo(32, -132 + hover); ctx.lineTo(46, -165 + hover); ctx.lineTo(16, -135 + hover);
+                ctx.fill();
+
+                // ดวงตาแกนพลังงาน
+                ctx.fillStyle = "#fde047";
+                ctx.shadowColor = "#38bdf8";
+                ctx.shadowBlur = 16;
+                ctx.beginPath();
+                ctx.arc(0, -95 + hover, 14, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            } else if (boss.stageIndex === 1) {
+                // บอส 2: อสูรหินหนืดแมนเทิล
+                for (let layer = 0; layer < 4; layer++) {
+                    const w = 85 - layer * 16;
+                    const yOff = -135 + layer * 28 + hover;
+                    const sway = Math.sin(time * 8 + layer) * 10;
+                    ctx.fillStyle = layer % 2 === 0 ? "#059669" : "#34d399";
+                    ctx.beginPath();
+                    ctx.ellipse(sway, yOff, w * 0.5, 14, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.fillStyle = "#fef08a";
+                ctx.beginPath();
+                ctx.arc(0, -110 + hover, 13, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                // บอส 3: ราชันย์แก่นเหล็กหลอมเหลว
+                ctx.fillStyle = "#7c2d12";
+                ctx.beginPath();
+                ctx.moveTo(0, -165 + hover);
+                ctx.lineTo(54, -95 + hover);
+                ctx.lineTo(38, -18 + hover);
+                ctx.lineTo(-38, -18 + hover);
+                ctx.lineTo(-54, -95 + hover);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.strokeStyle = "#fb923c";
+                ctx.lineWidth = 3.5;
+                ctx.stroke();
+
+                // มงกุฎเปลวเพลิง
+                ctx.fillStyle = "#fbbf24";
+                ctx.beginPath();
+                ctx.moveTo(-25, -155 + hover); ctx.lineTo(-18, -182 + hover); ctx.lineTo(-6, -160 + hover);
+                ctx.lineTo(0, -190 + hover); ctx.lineTo(6, -160 + hover);
+                ctx.lineTo(18, -182 + hover); ctx.lineTo(25, -155 + hover);
+                ctx.fill();
+
+                ctx.fillStyle = "#fef08a";
+                ctx.shadowColor = "#f97316";
+                ctx.shadowBlur = 20;
+                ctx.beginPath();
+                ctx.arc(0, -95 + hover, 16, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            // หลอดพลังชีวิตบอสเหนือหัว
+            ctx.filter = "none";
+            const barW = 110;
+            const hpRatio = boss.currentHp / boss.maxHp;
+            ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+            ctx.beginPath();
+            ctx.roundRect(-barW / 2, -212, barW, 12, 6);
+            ctx.fill();
+
+            ctx.fillStyle = cfg.themeColor;
+            ctx.beginPath();
+            ctx.roundRect(-barW / 2 + 2, -210, (barW - 4) * hpRatio, 8, 4);
+            ctx.fill();
+
+            ctx.font = "bold 12px 'Prompt', sans-serif";
+            ctx.fillStyle = "#f8fafc";
+            ctx.textAlign = "center";
+            ctx.fillText(cfg.bossName, 0, -220);
+
+            ctx.restore();
+        }
+
+        function renderGame(time) {
+            ctx.clearRect(0, 0, viewW, viewH);
+
+            // 1. ท้องฟ้ายามสนธยาและแสงออโรรา
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+            skyGrad.addColorStop(0, "#020617");
+            skyGrad.addColorStop(0.55, "#0f172a");
+            skyGrad.addColorStop(1, "#1e293b");
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, viewW, viewH);
+
+            // แสงออโรราพริ้วไหวบนท้องฟ้า
+            const auroraGrad = ctx.createLinearGradient(0, viewH * 0.1, viewW, viewH * 0.45);
+            auroraGrad.addColorStop(0, "rgba(56, 189, 248, 0.06)");
+            auroraGrad.addColorStop(0.5, "rgba(52, 211, 153, 0.14)");
+            auroraGrad.addColorStop(1, "rgba(251, 191, 36, 0.08)");
+            ctx.fillStyle = auroraGrad;
+            ctx.beginPath();
+            ctx.moveTo(0, viewH * 0.25);
+            ctx.quadraticCurveTo(viewW * 0.5, viewH * 0.12 + Math.sin(time) * 25, viewW, viewH * 0.28);
+            ctx.lineTo(viewW, viewH * 0.5);
+            ctx.lineTo(0, viewH * 0.5);
+            ctx.closePath();
+            ctx.fill();
+
+            // ดวงดาวระยิบระยับ
+            bgStars.forEach(s => {
+                const sx = ((s.x - camera2D.x * 0.15) % viewW + viewW) % viewW;
+                const alpha = 0.35 + 0.65 * Math.abs(Math.sin(time * 2 + s.phase));
+                ctx.fillStyle = `rgba(248, 250, 252, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(sx, s.y, s.r, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // ภูเขาฉากหลังแบบ Parallax
+            ctx.fillStyle = "#0b1324";
+            for (let i = -1; i < 8; i++) {
+                const mx = i * 380 - ((camera2D.x * 0.3) % 380);
+                ctx.beginPath();
+                ctx.moveTo(mx, groundY);
+                ctx.lineTo(mx + 190, groundY - 190);
+                ctx.lineTo(mx + 380, groundY);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // เริ่มกล้อง 2D พร้อมแรงสั่นสะเทือน
+            ctx.save();
+            const shakeX = camera2D.shake > 0 ? (Math.random() - 0.5) * camera2D.shake : 0;
+            const shakeY = camera2D.shake > 0 ? (Math.random() - 0.5) * camera2D.shake : 0;
+            ctx.translate(-camera2D.x + shakeX, shakeY);
+
+            // 2. พื้นดินและเส้นรูนเรืองแสง
+            const groundGrad = ctx.createLinearGradient(0, groundY, 0, viewH);
+            groundGrad.addColorStop(0, "#0f172a");
+            groundGrad.addColorStop(1, "#020617");
+            ctx.fillStyle = groundGrad;
+            ctx.fillRect(0, groundY, 5600, viewH - groundY);
+
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, groundY);
+            ctx.lineTo(5600, groundY);
+            ctx.stroke();
+
+            // 3. วาดแท่นลอยฟ้า
+            platforms.forEach(p => {
+                ctx.fillStyle = "#1e293b";
+                ctx.beginPath();
+                ctx.roundRect(p.x, p.y, p.w, p.h, 8);
+                ctx.fill();
+                ctx.strokeStyle = p.color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+
+            // 4. วาดประตูมิติกั้นด่าน
+            stageGates.forEach(gate => {
+                if (gate.open) return;
+                ctx.save();
+                ctx.strokeStyle = gate.color;
+                ctx.lineWidth = 5;
+                ctx.shadowColor = gate.color;
+                ctx.shadowBlur = 16;
+                ctx.beginPath();
+                ctx.moveTo(gate.x, gate.y);
+                ctx.lineTo(gate.x, gate.y - 230);
+                ctx.stroke();
+                ctx.restore();
+            });
+
+            // 5. วาดคริสตัลโบนัส
+            gems.forEach(g => {
+                if (g.collected) return;
+                const bob = Math.sin(time * 4 + g.phase) * 5;
+                ctx.save();
+                ctx.translate(g.x, g.y + bob);
+                ctx.fillStyle = "#fbbf24";
+                ctx.shadowColor = "#fbbf24";
+                ctx.shadowBlur = 12;
+                ctx.beginPath();
+                ctx.moveTo(0, -12);
+                ctx.lineTo(9, 0);
+                ctx.lineTo(0, 12);
+                ctx.lineTo(-9, 0);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // 6. วาดสิ่งกีดขวางทั้ง 3 ประเภท
+            hazards.forEach(h => {
+                ctx.save();
+                ctx.translate(h.x, h.y);
+                ctx.rotate(h.angle);
+                if (h.type === "rock") {
+                    ctx.fillStyle = "#64748b";
+                    ctx.beginPath();
+                    ctx.arc(0, 0, h.r, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = "#38bdf8";
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+                } else if (h.type === "cyclone") {
+                    ctx.strokeStyle = "#34d399";
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, h.r * 0.85, 0, Math.PI * 1.5);
+                    ctx.stroke();
+                } else {
+                    ctx.fillStyle = "#f97316";
+                    ctx.shadowColor = "#ef4444";
+                    ctx.shadowBlur = 14;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, h.r, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            });
+
+            // 7. วาดบอสทั้ง 3 ด่าน
+            bosses.forEach(b => drawBoss(b, time));
+
+            // 8. วาดเงาติดตาตอนพุ่งตัว Dash และตัวละครหลัก
+            player.afterImages.forEach(img => {
+                ctx.save();
+                ctx.globalAlpha = img.alpha * 0.45;
+                drawHero(img.x, img.y, player.facing, gameState.gender === 'female', player.animTime, false, true);
+                ctx.restore();
+            });
+
+            const blink = player.invulnTimer > 0 && Math.floor(time * 20) % 2 === 0;
+            if (!blink) {
+                drawHero(
+                    player.x,
+                    player.y,
+                    player.facing,
+                    gameState.gender === 'female',
+                    player.animTime,
+                    Math.abs(player.vx) > 20,
+                    player.dashTimer > 0
+                );
+            }
+
+            // 9. วาดลำแสงโจมตีบอส
+            beams.forEach(b => {
+                const cx = b.x + (b.targetX - b.x) * b.progress;
+                const cy = b.y + (b.targetY - b.y) * b.progress;
+                const beamColor = b.isCutsceneMagic ? "#e879f9" : "#38bdf8";
+                ctx.save();
+                ctx.strokeStyle = beamColor;
+                ctx.lineWidth = b.isCutsceneMagic ? 14 : 8;
+                ctx.shadowColor = beamColor;
+                ctx.shadowBlur = 24;
+                ctx.beginPath();
+                ctx.moveTo(b.x, b.y);
+                ctx.lineTo(cx, cy);
+                ctx.stroke();
+
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(cx, cy, b.isCutsceneMagic ? 18 : 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // 10. วาดเอฟเฟกต์คัตซีนปราบบอส
+            if (cutscene.active) {
+                if (cutscene.skyBeamAlpha > 0 && cutscene.boss) {
+                    ctx.save();
+                    const bx = cutscene.boss.x;
+                    const beamGrad = ctx.createLinearGradient(bx - 90, 0, bx + 90, 0);
+                    beamGrad.addColorStop(0, "rgba(56, 189, 248, 0)");
+                    beamGrad.addColorStop(0.25, `rgba(52, 211, 153, ${cutscene.skyBeamAlpha * 0.65})`);
+                    beamGrad.addColorStop(0.5, `rgba(255, 255, 255, ${cutscene.skyBeamAlpha * 0.95})`);
+                    beamGrad.addColorStop(0.75, `rgba(251, 191, 36, ${cutscene.skyBeamAlpha * 0.65})`);
+                    beamGrad.addColorStop(1, "rgba(232, 121, 249, 0)");
+                    ctx.fillStyle = beamGrad;
+                    ctx.fillRect(bx - 95, 0, 190, groundY);
+                    ctx.restore();
+                }
+
+                cutscene.shockwaves.forEach(sw => {
+                    const alpha = Math.max(0, sw.life / sw.maxLife);
+                    ctx.save();
+                    ctx.strokeStyle = sw.color;
+                    ctx.globalAlpha = alpha;
+                    ctx.lineWidth = 5 * alpha;
+                    ctx.beginPath();
+                    ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                });
+
+                cutscene.slashes.forEach(sl => {
+                    const alpha = Math.max(0, sl.life / sl.maxLife);
+                    ctx.save();
+                    ctx.translate(sl.x, sl.y);
+                    ctx.rotate(sl.angle);
+                    ctx.globalAlpha = alpha;
+                    ctx.shadowColor = sl.color;
+                    ctx.shadowBlur = 22;
+                    ctx.fillStyle = sl.color;
+                    ctx.beginPath();
+                    ctx.moveTo(-sl.length, 0);
+                    ctx.quadraticCurveTo(0, -18 * alpha, sl.length, 0);
+                    ctx.quadraticCurveTo(0, 18 * alpha, -sl.length, 0);
+                    ctx.fill();
+
+                    ctx.fillStyle = "#ffffff";
+                    ctx.beginPath();
+                    ctx.moveTo(-sl.length * 0.75, 0);
+                    ctx.quadraticCurveTo(0, -7 * alpha, sl.length * 0.75, 0);
+                    ctx.quadraticCurveTo(0, 7 * alpha, -sl.length * 0.75, 0);
+                    ctx.fill();
+                    ctx.restore();
+                });
+            }
+
+            // 11. วาดอนุภาคประกายแสงและตัวเลขคะแนนลอย
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            floatingTexts.forEach(ft => {
+                ctx.save();
+                ctx.globalAlpha = Math.min(1, ft.life);
+                ctx.font = "bold 15px 'Chakra Petch', 'Prompt', sans-serif";
+                ctx.fillStyle = ft.color;
+                ctx.textAlign = "center";
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.restore();
+            });
+
+            ctx.restore();
+
+            // แถบภาพยนตร์ Letterbox และข้อความท่าไม้ตายระหว่างฉากคัตซีน
+            if (cutscene.active) {
+                const barH = Math.max(46, viewH * 0.09);
+                ctx.fillStyle = "rgba(2, 6, 23, 0.92)";
+                ctx.fillRect(0, 0, viewW, barH);
+                ctx.fillRect(0, viewH - barH, viewW, barH);
+
+                ctx.strokeStyle = cutscene.type === 'stage3_perfect' ? "#fbbf24" : "#38bdf8";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, barH); ctx.lineTo(viewW, barH);
+                ctx.moveTo(0, viewH - barH); ctx.lineTo(viewW, viewH - barH);
+                ctx.stroke();
+
+                ctx.save();
+                ctx.textAlign = "center";
+                ctx.font = "bold 18px 'Chakra Petch', 'Prompt', sans-serif";
+                ctx.fillStyle = cutscene.type === 'stage3_perfect' ? "#fde047" : "#38bdf8";
+                ctx.fillText(cutscene.bannerTitle, viewW * 0.5, barH * 0.62);
+
+                ctx.font = "500 14px 'Prompt', sans-serif";
+                ctx.fillStyle = "#f8fafc";
+                ctx.fillText(cutscene.bannerSub, viewW * 0.5, viewH - barH * 0.38);
+                ctx.restore();
+            }
+        }
+
+        let lastTimestamp = 0;
+        function gameLoop(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const dt = Math.min(0.05, (timestamp - lastTimestamp) / 1000);
+            lastTimestamp = timestamp;
+
+            updateGame(dt, timestamp / 1000);
+            renderGame(timestamp / 1000);
+            requestAnimationFrame(gameLoop);
+        }
+
+        // =====================================================================
+        // 8. การเริ่มต้นเกมและปุ่มควบคุม UI
+        // =====================================================================
+        async function tryLockLandscape() {
+            try {
+                if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+                    await document.documentElement.requestFullscreen().catch(() => {});
+                }
+                if (screen.orientation && screen.orientation.lock) {
+                    await screen.orientation.lock('landscape').catch(() => {});
+                }
+            } catch (err) {
+                // เบราว์เซอร์บางตัวอาจไม่อนุญาตให้ล็อกอัตโนมัติ ผู้ใช้สามารถหมุนเครื่องเองได้ทันที
+            }
+        }
+
+        function startOrRestartGame(playerName) {
+            sound.unlock();
+            sound.playClick();
+            tryLockLandscape();
+
+            gameState.playerName = playerName;
+            gameState.isPlaying = true;
+            gameState.isQuizOpen = false;
+            gameState.score = 0;
+            gameState.correctCount = 0;
+            gameState.wrongCount = 0;
+            gameState.currentStageIndex = 0;
+            gameState.currentQuestionIndex = 0;
+            gameState.stageQuestionProgress = 0;
+            gameState.activeBoss = null;
+
+            cutscene.active = false;
+            beams = [];
+            particles = [];
+            floatingTexts = [];
+
+            player.x = 140;
+            player.y = groundY;
+            player.vx = 0;
+            player.vy = 0;
+            player.facing = 1;
+            player.jumpsLeft = 2;
+            player.dashTimer = 0;
+            player.invulnTimer = 0;
+            player.afterImages = [];
+            camera2D.x = 0;
+
+            buildWorldEntities();
+            updateHUD();
+
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('end-screen').classList.add('hidden');
+            document.getElementById('end-screen').classList.remove('flex');
+            document.getElementById('hud-container').classList.remove('hidden');
+
+            // แสดงปุ่มกดบนหน้าจออัตโนมัติบนมือถือ/แท็บเล็ต
+            const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || window.innerWidth <= 900;
+            if (isTouch) {
+                document.getElementById('touch-controls').classList.remove('hidden');
+            }
+        }
+
+        window.onload = function () {
+            resizeCanvas();
+            initStars();
+            buildWorldEntities();
+
+            // ปุ่มเลือกเพศตัวละคร
+            const btnMale = document.getElementById('select-male');
+            const btnFemale = document.getElementById('select-female');
+
+            btnMale.addEventListener('click', () => {
+                sound.playClick();
+                gameState.gender = 'male';
+                btnMale.className = "btn-arcade p-3 rounded-2xl border-2 border-sky-400 bg-sky-500/20 flex items-center gap-3 text-left transition";
+                btnFemale.className = "btn-arcade p-3 rounded-2xl border border-slate-700 bg-slate-800/70 flex items-center gap-3 text-left transition";
+            });
+
+            btnFemale.addEventListener('click', () => {
+                sound.playClick();
+                gameState.gender = 'female';
+                btnFemale.className = "btn-arcade p-3 rounded-2xl border-2 border-teal-400 bg-teal-500/20 flex items-center gap-3 text-left transition";
+                btnMale.className = "btn-arcade p-3 rounded-2xl border border-slate-700 bg-slate-800/70 flex items-center gap-3 text-left transition";
+            });
+
+            // ปุ่มเริ่มเกม
+            document.getElementById('start-game-btn').addEventListener('click', () => {
+                const nameVal = document.getElementById('player-name-input').value.trim();
+                const errEl = document.getElementById('name-error-msg');
+                if (!nameVal) {
+                    errEl.classList.remove('hidden');
+                    return;
+                }
+                errEl.classList.add('hidden');
+                startOrRestartGame(nameVal);
+            });
+
+            // ปุ่มสลับแสดง/ซ่อนปุ่มสัมผัสและเสียง
+            document.getElementById('toggle-touch-btn').addEventListener('click', () => {
+                sound.playClick();
+                document.getElementById('touch-controls').classList.toggle('hidden');
+            });
+
+            document.getElementById('toggle-sound-btn').addEventListener('click', (e) => {
+                sound.enabled = !sound.enabled;
+                e.currentTarget.textContent = sound.enabled ? '🔊' : '🔇';
+                if (sound.enabled) sound.playClick();
+            });
+
+            // ผูกปุ่มสัมผัสบนหน้าจอ (รองรับ Multi-touch)
+            const bindHoldButton = (id, onDown, onUp) => {
+                const el = document.getElementById(id);
+                el.addEventListener('pointerdown', (e) => {
+                    e.preventDefault();
+                    sound.unlock();
+                    onDown();
+                });
+                const release = (e) => {
+                    e.preventDefault();
+                    if (onUp) onUp();
+                };
+                el.addEventListener('pointerup', release);
+                el.addEventListener('pointerleave', release);
+                el.addEventListener('pointercancel', release);
+            };
+
+            bindHoldButton('btn-left', () => { input.left = true; }, () => { input.left = false; });
+            bindHoldButton('btn-right', () => { input.right = true; }, () => { input.right = false; });
+            bindHoldButton('btn-jump', () => triggerJump(), null);
+            bindHoldButton('btn-dash', () => triggerDash(), null);
+
+            // ปุ่มดำเนินการต่อในหน้าต่างคำถาม
+            document.getElementById('quiz-continue-btn').addEventListener('click', () => {
+                sound.playClick();
+                const stageCfg = STAGES_CONFIG[gameState.currentStageIndex];
+
+                if (gameState.wrongCount >= 6) {
+                    showEndScreen(false);
+                    return;
+                }
+
+                if (gameState.stageQuestionProgress < stageCfg.questionCount) {
+                    showQuizModal(gameState.currentQuestionIndex);
+                    return;
+                }
+
+                const modal = document.getElementById('quiz-modal');
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                gameState.isQuizOpen = false;
+
+                const clearedStageIdx = gameState.currentStageIndex;
+                const clearedBoss = gameState.activeBoss;
+                const isFinalStage = gameState.currentQuestionIndex >= QUESTIONS_BANK.length;
+                const isPerfectTen = gameState.correctCount === QUESTIONS_BANK.length;
+
+                // เล่นฉากคัตซีนท่าไม้ตายปราบบอสประจำด่านก่อนเปิดประตูหรือจบเกม
+                startBossDefeatCutscene(clearedStageIdx, clearedBoss, isPerfectTen, () => {
+                    if (clearedBoss) {
+                        clearedBoss.defeated = true;
+                    }
+
+                    const currentGate = stageGates.find(g => g.stageIndex === clearedStageIdx);
+                    if (currentGate) {
+                        currentGate.open = true;
+                    }
+
+                    if (isFinalStage) {
+                        showEndScreen(gameState.correctCount >= 5);
+                    } else {
+                        gameState.currentStageIndex += 1;
+                        updateHUD();
+                        document.getElementById('hud-guide-text').textContent = `ด่าน ${gameState.currentStageIndex + 1} เปิดแล้ว! วิ่งลุยต่อไปเลย`;
+                    }
+                });
+            });
+
+            document.getElementById('play-again-btn').addEventListener('click', () => {
+                startOrRestartGame(gameState.playerName);
+            });
+
+            document.getElementById('force-landscape-btn').addEventListener('click', () => {
+                sound.unlock();
+                sound.playClick();
+                tryLockLandscape();
+            });
+
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
